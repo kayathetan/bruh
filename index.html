@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>bruh</title>
+  <meta name="theme-color" content="#111111">
+  <style>
+    :root { --bg:#111; --card:#1c1c1c; --text:#f2f2f2; --muted:#9a9a9a; --accent:#e60023; --ok:#3ecf8e; --bad:#ff6b6b; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font:16px/1.4 -apple-system, system-ui, sans-serif; }
+    main { max-width:640px; margin:0 auto; padding:20px 16px 60px; }
+    h1 { font-size:28px; margin:8px 0 4px; }
+    p.sub { color:var(--muted); margin:0 0 20px; }
+    label { display:block; font-size:14px; color:var(--muted); margin:14px 0 6px; }
+    input, textarea { width:100%; background:var(--card); color:var(--text); border:1px solid #333; border-radius:12px; padding:12px; font:inherit; }
+    textarea { min-height:160px; resize:vertical; }
+    button { width:100%; margin-top:12px; padding:14px; border:0; border-radius:12px; font:600 16px/1 inherit; color:#fff; background:var(--accent); }
+    button.secondary { background:#2a2a2a; }
+    button:disabled { opacity:.45; }
+    #status { color:var(--muted); margin:14px 0 0; min-height:1.4em; }
+    ul { list-style:none; padding:0; margin:16px 0 0; }
+    li { background:var(--card); border-radius:12px; padding:12px; margin-bottom:8px; display:flex; gap:10px; align-items:center; }
+    li .info { flex:1; min-width:0; }
+    li .name { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    li .detail { font-size:13px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    li.fail .detail { color:var(--bad); }
+    li a { color:var(--ok); text-decoration:none; font-weight:600; white-space:nowrap; }
+  </style>
+  <!-- JSZip builds a .zip file inside the browser. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+<main>
+  <h1>bruh</h1>
+  <p class="sub">Paste Pinterest links (one per line, or just paste a bunch of text) and save them all.</p>
+
+  <label for="passcode">Passcode</label>
+  <input id="passcode" type="password" autocomplete="current-password">
+
+  <label for="links">Links</label>
+  <textarea id="links" placeholder="https://pin.it/...&#10;https://pin.it/..."></textarea>
+
+  <button id="find">Find media</button>
+  <p id="status"></p>
+  <ul id="results"></ul>
+
+  <button id="zip" class="secondary" hidden>Download all (.zip)</button>
+  <button id="share" class="secondary" hidden>Save all to Photos</button>
+</main>
+
+<script>
+// ---- Small helpers --------------------------------------------------------
+// document.getElementById finds an element on the page by its id="...".
+const $ = (id) => document.getElementById(id);
+const setStatus = (text) => { $('status').textContent = text; };
+
+// Remember the passcode on this phone so you don't retype it every time.
+// try/catch because some private-browsing modes block storage.
+try { $('passcode').value = localStorage.getItem('passcode') || ''; } catch {}
+
+// The list of successfully found Pins, filled in by "Find media".
+let found = [];
+
+// Pull every Pinterest link out of whatever text was pasted.
+function extractLinks(text) {
+  const matches = text.match(/https:\/\/(?:pin\.it|(?:[a-z]+\.)?pinterest\.[a-z.]+)\/[^\s"'<>]+/gi) || [];
+  return [...new Set(matches)];
+}
+
+// Build the address of our relay for one file.
+function fileUrl(item) {
+  const params = new URLSearchParams({ url: item.mediaUrl, name: item.filename, p: $('passcode').value });
+  return `/api/file?${params}`;
+}
+
+// ---- Step 1: ask the server to find the media in every link --------------
+$('find').addEventListener('click', async () => {
+  const links = extractLinks($('links').value);
+  if (links.length === 0) return setStatus('No Pinterest links found in that text.');
+  try { localStorage.setItem('passcode', $('passcode').value); } catch {}
+
+  $('find').disabled = true;
+  $('zip').hidden = $('share').hidden = true;
+  $('results').innerHTML = '';
+  setStatus(`Looking up ${links.length} link(s)...`);
+
+  try {
+    // fetch() sends a request to our own /api/resolve function.
+    // "await" pauses here until the server answers.
+    const response = await fetch('/api/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-passcode': $('passcode').value },
+      body: JSON.stringify({ links }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Something went wrong');
+
+    found = data.results.filter((r) => r.ok);
+    renderResults(data.results);
+    setStatus(`Found ${found.length} of ${data.results.length}.`);
+    $('zip').hidden = found.length === 0;
+    // Only show "Save to Photos" if this browser can share files (iPhone/Android can).
+    $('share').hidden = found.length === 0 || !navigator.canShare;
+  } catch (err) {
+    setStatus(`Error: ${err.message}`);
+  } finally {
+    $('find').disabled = false;
+  }
+});
+
+// Draw one row per link, with a "Save" link for each that worked.
+function renderResults(results) {
+  const list = $('results');
+  for (const r of results) {
+    const li = document.createElement('li');
+    if (!r.ok) li.className = 'fail';
+    const info = document.createElement('div');
+    info.className = 'info';
+    info.innerHTML = '<div class="name"></div><div class="detail"></div>';
+    // textContent (not innerHTML) so pasted text can never inject HTML.
+    info.querySelector('.name').textContent = r.ok ? r.filename : r.link;
+    info.querySelector('.detail').textContent = r.ok ? r.type : r.error;
+    li.appendChild(info);
+    if (r.ok) {
+      const a = document.createElement('a');
+      a.href = fileUrl(r);
+      a.textContent = 'Save';
+      li.appendChild(a);
+    }
+    list.appendChild(li);
+  }
+}
+
+// Download every file through our relay, one at a time, reporting progress.
+async function downloadAll() {
+  const files = [];
+  for (let i = 0; i < found.length; i++) {
+    setStatus(`Downloading ${i + 1} of ${found.length}...`);
+    const response = await fetch(fileUrl(found[i]));
+    if (!response.ok) throw new Error(`${found[i].filename} failed`);
+    files.push({ name: found[i].filename, blob: await response.blob() });
+  }
+  return files;
+}
+
+// ---- Step 2a: one .zip with everything -----------------------------------
+$('zip').addEventListener('click', async () => {
+  $('zip').disabled = true;
+  try {
+    const zip = new JSZip();
+    for (const f of await downloadAll()) zip.file(f.name, f.blob);
+    setStatus('Zipping...');
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    // Make a temporary link to the zip in memory and "click" it to save.
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(zipBlob);
+    a.download = `pins-${Date.now()}.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    setStatus(`Saved ${found.length} file(s) as a zip.`);
+  } catch (err) {
+    setStatus(`Error: ${err.message}`);
+  } finally {
+    $('zip').disabled = false;
+  }
+});
+
+// ---- Step 2b: phone share sheet -> "Save Videos" into Photos -------------
+$('share').addEventListener('click', async () => {
+  $('share').disabled = true;
+  try {
+    const files = (await downloadAll()).map((f) => new File([f.blob], f.name, { type: f.blob.type }));
+    if (!navigator.canShare({ files })) throw new Error("This browser can't share these files");
+    setStatus('Choose "Save Videos" / "Save Images" in the share sheet.');
+    await navigator.share({ files });
+  } catch (err) {
+    // AbortError just means the share sheet was closed. That isn't a real error.
+    if (err.name !== 'AbortError') setStatus(`Error: ${err.message}`);
+  } finally {
+    $('share').disabled = false;
+  }
+});
+</script>
+</body>
+</html>
