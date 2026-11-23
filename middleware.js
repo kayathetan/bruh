@@ -50,7 +50,7 @@ const LOCK_SCREEN = `<!doctype html>
 </head>
 <body class="lock">
 <form id="f">
-  <h1 class="mark">bruh</h1>
+  <h1 class="mark">kaya loves shortcuts</h1>
   <input id="code" type="password" autocomplete="current-password" autofocus aria-label="Passcode" placeholder="passcode">
   <button class="btn primary">Unlock</button>
   <p class="status bad" id="err" aria-live="polite"></p>

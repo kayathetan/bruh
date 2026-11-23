@@ -199,7 +199,15 @@ textarea:focus-visible, input:focus-visible { outline: none; }
   padding: 24px 16px;
 }
 .lock form { width: min(320px, 100%); }
-.lock .mark { font-size: 96px; text-align: center; margin-bottom: 36px; }
+/* Longer phrase than the app's wordmark, so smaller, allowed to wrap
+   onto two lines on a phone, and given a wider column than the form. */
+.lock .mark {
+  font-size: clamp(46px, 14vw, 76px);
+  line-height: 0.95;
+  text-align: center;
+  margin: 0 -40px 36px;
+  text-wrap: balance;
+}
 .lock input {
   text-align: center;
   letter-spacing: 0.3em;
