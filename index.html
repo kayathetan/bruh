@@ -409,10 +409,14 @@ async function loadClip(file, keepSound) {
     video.playsInline = true;   // play inside the page, not fullscreen (iPhone)
     video.muted = !keepSound;
     video.preload = 'auto';
-    // Wait until the first frame is ready ("loadeddata").
+    // Wait until the first frame is ready ("loadeddata"), but give up after
+    // 15s so one bad file can't freeze the whole montage. Some phones only
+    // start loading a video once it's asked to play, hence video.load().
     await new Promise((resolve, reject) => {
-      video.onloadeddata = resolve;
-      video.onerror = () => reject(new Error(`Couldn't read ${file.name}`));
+      const timer = setTimeout(() => reject(new Error(`${file.name} took too long to load`)), 15000);
+      video.onloadeddata = () => { clearTimeout(timer); resolve(); };
+      video.onerror = () => { clearTimeout(timer); reject(new Error(`Couldn't read ${file.name}`)); };
+      video.load();
     });
     return { kind: 'video', source: video, width: video.videoWidth, height: video.videoHeight };
   }
@@ -486,11 +490,22 @@ onClick($('makeMontage'), $('montageStatus'), async () => {
   // requestAnimationFrame(fn) = "call fn just before the next screen refresh".
   const showClip = (clip, isFirst) => new Promise((resolve, reject) => {
     const start = performance.now();
+    // Stall guard: if a video's playback position stops moving for 4s (some
+    // files stall right before the end and never report "ended"), move on.
+    let lastTime = -1;
+    let lastMoved = start;
     const frame = (now) => {
       const elapsed = now - start;
       drawFill(clip);
       if (!isFirst) drawFlash(elapsed);
-      const done = clip.kind === 'image' ? elapsed >= photoMs : clip.source.ended;
+      let done;
+      if (clip.kind === 'image') {
+        done = elapsed >= photoMs;
+      } else {
+        const t = clip.source.currentTime;
+        if (t !== lastTime) { lastTime = t; lastMoved = now; }
+        done = clip.source.ended || now - lastMoved > 4000;
+      }
       if (done) return resolve();
       requestAnimationFrame(frame);
     };
@@ -503,16 +518,51 @@ onClick($('makeMontage'), $('montageStatus'), async () => {
     }
   });
 
+  // Keep the screen awake while recording: if the phone dims or locks, the
+  // browser stops drawing frames and the montage freezes.
+  let wakeLock = null;
+  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (_) {}
+
+  // Fully let go of a finished clip. Phones only allow a handful of video
+  // players at once; without emptying each one, the montage got stuck after
+  // about a dozen clips because the next video was never allowed to start.
+  const releaseClip = (clip) => {
+    if (clip.kind === 'video') {
+      const v = clip.source;
+      v.pause();
+      const url = v.src;
+      v.removeAttribute('src');
+      v.load();                  // tells the browser to drop the video decoder
+      URL.revokeObjectURL(url);  // frees the file's memory
+    } else {
+      clip.source.close();       // frees the decoded photo
+    }
+  };
+
   // 5. Play everything in order. While one clip shows, the next one loads,
-  //    so there's no pause between them.
-  let next = loadClip(files[0], keepSound);
-  for (let i = 0; i < files.length; i++) {
-    status.textContent = `Recording ${i + 1} of ${files.length}. Keep this page open.`;
-    const clip = await next;
-    next = i + 1 < files.length ? loadClip(files[i + 1], keepSound) : null;
-    await showClip(clip, i === 0);
-    if (clip.kind === 'video') URL.revokeObjectURL(clip.source.src); // free memory
-    else clip.source.close();
+  //    so there's no pause between them. A clip that won't load is skipped.
+  // Loading is wrapped so a failure becomes { skipped } instead of an error.
+  const tryLoad = (file) => loadClip(file, keepSound).catch((err) => ({ skipped: err.message }));
+  const skipped = [];
+  let next = tryLoad(files[0]);
+  let isFirst = true;
+  try {
+    for (let i = 0; i < files.length; i++) {
+      status.textContent = `Recording ${i + 1} of ${files.length}. Keep this page open.`;
+      const clip = await next;
+      next = i + 1 < files.length ? tryLoad(files[i + 1]) : null;
+      if (clip.skipped) { skipped.push(clip.skipped); continue; }
+      try {
+        await showClip(clip, isFirst);
+        isFirst = false;
+      } catch (err) {
+        skipped.push(`${files[i].name}: ${err.message}`); // e.g. refused to play
+      } finally {
+        releaseClip(clip);
+      }
+    }
+  } finally {
+    try { await wakeLock?.release(); } catch (_) {}
   }
 
   // 6. Stop recording and package the result.
@@ -528,7 +578,8 @@ onClick($('makeMontage'), $('montageStatus'), async () => {
   $('montageResult').src = URL.createObjectURL(blob);
   $('montageResult').hidden = false;
   $('montageActions').hidden = false;
-  status.textContent = `Done. ${files.length} clip(s), ${(blob.size / 1e6).toFixed(1)} MB.`;
+  status.textContent = `Done. ${files.length - skipped.length} clip(s), ${(blob.size / 1e6).toFixed(1)} MB.`
+    + (skipped.length ? ` Skipped ${skipped.length}: ${skipped.join('; ')}` : '');
 });
 
 onClick($('montageShare'), $('montageStatus'), () => shareFiles([montageFile], $('montageStatus')));
