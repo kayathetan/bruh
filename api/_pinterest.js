@@ -51,28 +51,55 @@ function findMedia(html) {
   return { videos, images };
 }
 
+// Work out the Pin's ID number from a link.
+// Full links already contain it: pinterest.com/pin/1234567890/
+// Short pin.it links redirect to the full link, so we follow the redirect.
+async function getPinId(link) {
+  const direct = link.match(/\/pin\/(\d+)/);
+  if (direct) return direct[1];
+  // fetch() follows redirects automatically; response.url is where it landed.
+  const response = await fetch(link, { headers: BROWSER_HEADERS, redirect: 'follow' });
+  const landed = response.url.match(/\/pin\/(\d+)/);
+  if (!landed) throw new Error("Couldn't find a Pin at that link");
+  return landed[1];
+}
+
 // Take one link the user pasted and work out what to download.
 // "async" means this function does slow work (network requests) and
 // returns a Promise. Callers use "await" to wait for the result.
 export async function resolvePin(link) {
-  // fetch() follows redirects automatically, so a pin.it short link
-  // ends up at the full Pin page. response.url is where it landed.
-  const response = await fetch(link, { headers: BROWSER_HEADERS, redirect: 'follow' });
-  if (!response.ok) throw new Error(`Pinterest returned ${response.status}`);
+  const pinId = await getPinId(link);
 
-  const finalUrl = response.url;
-  const html = await response.text();
-  const pinId = (finalUrl.match(/\/pin\/(\d+)/) || [])[1] || 'pin';
-  const { videos, images } = findMedia(html);
+  // Pinterest's public embed widget (what blogs use to show a Pin) returns
+  // the Pin's data as JSON. It's more reliable than the normal Pin page,
+  // which Pinterest sends in a stripped-down form to cloud servers like Vercel.
+  const widget = await fetch(
+    `https://widgets.pinterest.com/v3/pidgets/pins/info/?pin_ids=${pinId}`,
+    { headers: BROWSER_HEADERS },
+  );
+  if (!widget.ok) throw new Error(`Pinterest returned ${widget.status}`);
+  const text = await widget.text();
 
+  // Videos: search the whole JSON text for .mp4 links (they can sit in
+  // several different places depending on the kind of Pin).
+  const { videos } = findMedia(text);
   if (videos.length > 0) {
     return { pinId, type: 'video', mediaUrl: videos[0], filename: `${pinId}.mp4` };
   }
-  if (images.length > 0) {
-    const ext = images[0].split('.').pop();
-    return { pinId, type: 'image', mediaUrl: images[0], filename: `${pinId}.${ext}` };
+
+  // Images: the widget gives sized versions like ".../564x/ab/cd/ef.jpg".
+  // Swapping "564x" for "originals" gives the full-size file.
+  const pin = JSON.parse(text)?.data?.[0];
+  const sized = pin?.images?.['564x']?.url;
+  if (sized) {
+    const original = sized.replace('/564x/', '/originals/');
+    // Check the full-size version exists; if not, settle for the 564px one.
+    const check = await fetch(original, { method: 'HEAD', headers: BROWSER_HEADERS });
+    const mediaUrl = check.ok ? original : sized;
+    const ext = mediaUrl.split('.').pop();
+    return { pinId, type: 'image', mediaUrl, filename: `${pinId}.${ext}` };
   }
-  throw new Error('No media found (private, deleted, or stream-only Pin)');
+  throw new Error('No media found (private or deleted Pin)');
 }
 
 // Optional passcode so only you can use the deployed site.
