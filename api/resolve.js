@@ -1,42 +1,32 @@
 // POST /api/resolve
-// Body: { "links": ["https://pin.it/...", ...] }
-// Reply: { "results": [ { link, ok, pinId, type, filename, mediaUrl } or { link, ok:false, error } ] }
+// Body:  { "links": ["https://...", ...] }
+// Reply: { "results": [ { link, ok: true, items: [...] } or { link, ok: false, error } ] }
 //
-// Finds the video/image inside each Pin. It doesn't download the media itself.
-// The phone asks /api/file for each one afterwards.
+// Finds the media behind each link. One link can give several items
+// (a board, a profile, or a post with several photos).
 
-import { resolvePin, passcodeOk } from './_pinterest.js';
+import { passcodeOk, mapLimited } from './_lib/http.js';
+import { resolveLink } from './_lib/resolve.js';
 
-const MAX_LINKS = 50;      // safety cap per request
-const CONCURRENCY = 5;     // how many Pins we look up at the same time
+const MAX_LINKS = 50;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST' });
   if (!passcodeOk(req.headers['x-passcode'])) return res.status(401).json({ error: 'Wrong passcode' });
 
-  // Keep only things that look like Pinterest links, and drop duplicates.
-  const links = [...new Set((req.body?.links || [])
-    .map((l) => String(l).trim())
-    .filter((l) => /^https:\/\/(pin\.it|([a-z]+\.)?pinterest\.[a-z.]+)\//i.test(l)))]
+  // Clean up the list: trim spaces, drop blanks and duplicates, cap the count.
+  const links = [...new Set((req.body?.links || []).map((l) => String(l).trim()).filter(Boolean))]
     .slice(0, MAX_LINKS);
+  if (links.length === 0) return res.status(400).json({ error: 'No links found' });
 
-  if (links.length === 0) return res.status(400).json({ error: 'No Pinterest links found' });
-
-  // Process links in small batches. Promise.all runs a batch in parallel
-  // and waits for all of them to finish.
-  const results = [];
-  for (let i = 0; i < links.length; i += CONCURRENCY) {
-    const batch = links.slice(i, i + CONCURRENCY);
-    const batchResults = await Promise.all(batch.map(async (link) => {
-      try {
-        return { link, ok: true, ...(await resolvePin(link)) };
-      } catch (err) {
-        // One bad link shouldn't break the others, so we report and move on.
-        return { link, ok: false, error: err.message };
-      }
-    }));
-    results.push(...batchResults);
-  }
+  // Look up 4 links at a time. One failing link doesn't stop the others.
+  const results = await mapLimited(links, 4, async (link) => {
+    try {
+      return { link, ok: true, items: await resolveLink(link) };
+    } catch (err) {
+      return { link, ok: false, error: err.message };
+    }
+  });
 
   res.status(200).json({ results });
 }
