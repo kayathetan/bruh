@@ -21,7 +21,7 @@ export default async function handler(req, res) {
 
   try {
     const items = await resolveLink(link);
-    // Work out our own address (e.g. https://bruh-tawny.vercel.app)
+    // Work out our own address (whatever domain this site is running on)
     // so each line is a complete link the Shortcut can open.
     const origin = `https://${req.headers.host}`;
     const lines = items.map((item) => {
