@@ -2,92 +2,78 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
   <title>bruh</title>
-  <meta name="theme-color" content="#111111">
-  <style>
-    :root { --bg:#111; --card:#1c1c1c; --line:#333; --text:#f2f2f2; --muted:#9a9a9a; --accent:#7c5cff; --ok:#3ecf8e; --bad:#ff6b6b; }
-    * { box-sizing: border-box; }
-    body { margin:0; background:var(--bg); color:var(--text); font:16px/1.4 -apple-system, system-ui, sans-serif; }
-    main { max-width:640px; margin:0 auto; padding:20px 16px 60px; }
-    h1 { font-size:28px; margin:8px 0 4px; }
-    h2 { font-size:20px; margin:36px 0 4px; }
-    p.sub { color:var(--muted); margin:0 0 16px; }
-    a { color:var(--accent); }
-    label { display:block; font-size:14px; color:var(--muted); margin:14px 0 6px; }
-    input, textarea, select { width:100%; background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:12px; padding:12px; font:inherit; }
-    textarea { min-height:150px; resize:vertical; }
-    .row { display:flex; gap:10px; }
-    .row > * { flex:1; min-width:0; }
-    button { width:100%; margin-top:12px; padding:14px; border:0; border-radius:12px; font:600 16px/1 inherit; color:#fff; background:var(--accent); }
-    button.secondary { background:#2a2a2a; }
-    button:disabled { opacity:.45; }
-    .status { color:var(--muted); margin:12px 0 0; min-height:1.4em; }
-    ul { list-style:none; padding:0; margin:14px 0 0; }
-    li { background:var(--card); border-radius:12px; padding:12px; margin-bottom:8px; display:flex; gap:10px; align-items:center; }
-    li .info { flex:1; min-width:0; }
-    li .name { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    li .detail { font-size:13px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    li.fail .detail { color:var(--bad); }
-    li a { color:var(--ok); text-decoration:none; font-weight:600; white-space:nowrap; }
-    .preview { display:grid; grid-template-columns:repeat(auto-fill, minmax(90px, 1fr)); gap:6px; margin-top:12px; }
-    .preview img { width:100%; border-radius:8px; display:block; }
-  </style>
+  <meta name="theme-color" content="#120e14">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@1,6..96,400&family=Geist:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
   <!-- JSZip builds .zip files inside the browser. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
-<main>
-  <div class="row" style="align-items:center">
-    <h1>bruh</h1>
-    <a href="#" id="lock" style="flex:0; white-space:nowrap; color:var(--muted); text-decoration:none">🔒 Lock</a>
-  </div>
-  <p class="sub">Paste links, save everything. <a href="/shortcut.html">Set up the share-sheet shortcut</a></p>
+<main class="shell">
+  <header class="top">
+    <h1 class="mark">bruh</h1>
+    <button class="btn ghost small" id="lock">Lock</button>
+  </header>
 
-  <!-- ===================== 1. Download ===================== -->
-  <label for="links">Links (one per line, or paste any text containing links)</label>
-  <textarea id="links" placeholder="https://..."></textarea>
-  <button id="find">Find media</button>
-  <p class="status" id="status"></p>
-  <ul id="results"></ul>
-  <div class="row">
-    <button id="zip" class="secondary" hidden>Download all (.zip)</button>
-    <button id="share" class="secondary" hidden>Save all to Photos</button>
-  </div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tab-save" aria-controls="panel-save" aria-selected="true">save</button>
+    <button role="tab" id="tab-resize" aria-controls="panel-resize" aria-selected="false">resize</button>
+  </nav>
 
-  <!-- ===================== 2. Resize ===================== -->
-  <h2>Resize &amp; crop images</h2>
-  <p class="sub">Uses the images found above, plus any you add here. Videos are skipped.</p>
-
-  <label for="upload">Add your own images (optional)</label>
-  <input id="upload" type="file" accept="image/*" multiple>
-
-  <div class="row">
-    <div>
-      <label for="size">Size</label>
-      <select id="size">
-        <option value="1280x720">16:9 thumbnail (1280×720)</option>
-        <option value="1920x1080">16:9 HD (1920×1080)</option>
-        <option value="1080x1920">9:16 story / short (1080×1920)</option>
-        <option value="1080x1080">1:1 square (1080×1080)</option>
-        <option value="1080x1350">4:5 portrait (1080×1350)</option>
-      </select>
+  <!-- ===================== Save ===================== -->
+  <section id="panel-save" role="tabpanel" aria-labelledby="tab-save">
+    <textarea id="links" aria-label="Links" placeholder="Paste links here. One, fifty, or a messy block of text."></textarea>
+    <button class="btn primary" id="find">Find media</button>
+    <p class="status" id="status" aria-live="polite"></p>
+    <ul class="rows" id="results"></ul>
+    <div class="actions" id="saveActions" hidden>
+      <button class="btn primary" id="share">Save to Photos</button>
+      <button class="btn ghost" id="zip">Download zip</button>
     </div>
-    <div>
-      <label for="mode">Fit</label>
-      <select id="mode">
-        <option value="crop">Crop to fill</option>
-        <option value="blur">Fit, blurred background</option>
-      </select>
+    <a class="quiet" href="/shortcut.html">Save from any app's Share button</a>
+  </section>
+
+  <!-- ===================== Resize ===================== -->
+  <section id="panel-resize" role="tabpanel" aria-labelledby="tab-resize" hidden>
+    <p class="hint">Uses the images you found in save, plus any you add here. Videos are skipped, and nothing leaves your phone.</p>
+
+    <label class="drop" id="dropLabel">
+      <input id="upload" type="file" accept="image/*" multiple>
+      <span id="dropText">Add your own images</span>
+    </label>
+
+    <fieldset class="group">
+      <legend>Size</legend>
+      <div class="pills">
+        <input type="radio" name="size" id="s1" value="1280x720" checked><label for="s1">16:9 <small>1280 × 720</small></label>
+        <input type="radio" name="size" id="s2" value="1920x1080"><label for="s2">16:9 HD <small>1920 × 1080</small></label>
+        <input type="radio" name="size" id="s3" value="1080x1920"><label for="s3">9:16 <small>1080 × 1920</small></label>
+        <input type="radio" name="size" id="s4" value="1080x1080"><label for="s4">1:1 <small>1080 × 1080</small></label>
+        <input type="radio" name="size" id="s5" value="1080x1350"><label for="s5">4:5 <small>1080 × 1350</small></label>
+      </div>
+    </fieldset>
+
+    <fieldset class="group">
+      <legend>Fit</legend>
+      <div class="pills">
+        <input type="radio" name="fit" id="f1" value="crop" checked><label for="f1">Crop to fill</label>
+        <input type="radio" name="fit" id="f2" value="blur"><label for="f2">Blurred background</label>
+      </div>
+    </fieldset>
+
+    <button class="btn primary" id="resize">Resize images</button>
+    <p class="status" id="resizeStatus" aria-live="polite"></p>
+    <div class="preview" id="preview"></div>
+    <div class="actions" id="resizeActions" hidden>
+      <button class="btn primary" id="resizeShare">Save to Photos</button>
+      <button class="btn ghost" id="resizeZip">Download zip</button>
     </div>
-  </div>
-  <button id="resize">Resize images</button>
-  <p class="status" id="resizeStatus"></p>
-  <div class="preview" id="preview"></div>
-  <div class="row">
-    <button id="resizeZip" class="secondary" hidden>Download resized (.zip)</button>
-    <button id="resizeShare" class="secondary" hidden>Save resized to Photos</button>
-  </div>
+  </section>
 </main>
 
 <script>
@@ -96,11 +82,28 @@
 // ---------------------------------------------------------------------------
 // document.getElementById finds an element on the page by its id="...".
 const $ = (id) => document.getElementById(id);
+// The currently ticked radio button in a group, e.g. picked('size') -> "1280x720".
+const picked = (name) => document.querySelector(`input[name="${name}"]:checked`).value;
 
-// You're logged in by a cookie (set on the lock screen), which the browser
-// sends automatically with every request to this site. "Lock" clears it.
-$('lock').addEventListener('click', async (event) => {
-  event.preventDefault();
+// Show a message under a button. Errors get the "bad" colour.
+function say(el, text, isError = false) {
+  el.textContent = text;
+  el.classList.toggle('bad', isError);
+}
+
+// ---- Tabs: show one panel, hide the other --------------------------------
+for (const tab of document.querySelectorAll('[role="tab"]')) {
+  tab.addEventListener('click', () => {
+    for (const other of document.querySelectorAll('[role="tab"]')) {
+      const selected = other === tab;
+      other.setAttribute('aria-selected', String(selected));
+      $(other.getAttribute('aria-controls')).hidden = !selected;
+    }
+  });
+}
+
+// ---- Lock: you're logged in by a cookie; this clears it ------------------
+$('lock').addEventListener('click', async () => {
   await fetch('/api/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -121,8 +124,7 @@ function extractLinks(text) {
 
 // Address of our relay for one file (see api/file.js for why we relay).
 function fileUrl(item) {
-  const params = new URLSearchParams({ url: item.mediaUrl, name: item.filename });
-  return `/api/file?${params}`;
+  return `/api/file?${new URLSearchParams({ url: item.mediaUrl, name: item.filename })}`;
 }
 
 // Download items through the relay one by one, reporting progress.
@@ -130,9 +132,9 @@ function fileUrl(item) {
 async function fetchFiles(items, statusEl) {
   const files = [];
   for (let i = 0; i < items.length; i++) {
-    statusEl.textContent = `Downloading ${i + 1} of ${items.length}...`;
+    say(statusEl, `Downloading ${i + 1} of ${items.length}`);
     const response = await fetch(fileUrl(items[i]));
-    if (!response.ok) throw new Error(`${items[i].filename} failed`);
+    if (!response.ok) throw new Error(`Couldn't download ${items[i].filename}`);
     const blob = await response.blob();
     files.push(new File([blob], items[i].filename, { type: blob.type }));
   }
@@ -143,7 +145,7 @@ async function fetchFiles(items, statusEl) {
 async function saveZip(files, statusEl, label) {
   const zip = new JSZip();
   for (const f of files) zip.file(f.name, f);
-  statusEl.textContent = 'Zipping...';
+  say(statusEl, 'Zipping');
   const blob = await zip.generateAsync({ type: 'blob' });
   // Make a temporary in-memory link and "click" it to start the download.
   const a = document.createElement('a');
@@ -151,19 +153,19 @@ async function saveZip(files, statusEl, label) {
   a.download = `${label}-${Date.now()}.zip`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-  statusEl.textContent = `Saved ${files.length} file(s) as a zip.`;
+  say(statusEl, `Downloaded ${files.length} file(s) as a zip`);
 }
 
 // Open the phone's share sheet so you can tap "Save to Photos".
 async function shareFiles(files, statusEl) {
   if (!navigator.canShare || !navigator.canShare({ files })) {
-    throw new Error("This browser can't share these files. Use the zip instead.");
+    throw new Error("This browser can't save straight to Photos. Use Download zip instead.");
   }
-  statusEl.textContent = 'Choose "Save Images" / "Save Videos" in the share sheet.';
+  say(statusEl, 'Tap "Save Images" or "Save Videos" in the share sheet');
   await navigator.share({ files });
 }
 
-// Run an async button action: disable the button meanwhile and show errors.
+// Run an async button action: disable the button meanwhile, show errors.
 function onClick(button, statusEl, action) {
   button.addEventListener('click', async () => {
     button.disabled = true;
@@ -171,7 +173,7 @@ function onClick(button, statusEl, action) {
       await action();
     } catch (err) {
       // AbortError = the share sheet was simply closed. Not a real error.
-      if (err.name !== 'AbortError') statusEl.textContent = `Error: ${err.message}`;
+      if (err.name !== 'AbortError') say(statusEl, err.message, true);
     } finally {
       button.disabled = false;
     }
@@ -179,15 +181,15 @@ function onClick(button, statusEl, action) {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Find media in the pasted links
+// Save: find media in the pasted links
 // ---------------------------------------------------------------------------
 onClick($('find'), $('status'), async () => {
   const links = extractLinks($('links').value);
-  if (links.length === 0) throw new Error('No links found in that text.');
+  if (links.length === 0) throw new Error('No links in there. Paste at least one https:// link.');
 
-  $('zip').hidden = $('share').hidden = true;
+  $('saveActions').hidden = true;
   $('results').innerHTML = '';
-  $('status').textContent = `Looking up ${links.length} link(s)...`;
+  say($('status'), `Looking through ${links.length} link(s)`);
 
   // Ask our server to find the media. "await" waits for the answer.
   const response = await fetch('/api/resolve', {
@@ -195,21 +197,21 @@ onClick($('find'), $('status'), async () => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ links }),
   });
+  if (response.status === 401) { location.reload(); return; } // logged out: show lock
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Something went wrong');
+  if (!response.ok) throw new Error(data.error || 'The server had a problem. Try again.');
 
   // One link can produce many items (a board, a multi-photo post...).
   // flatMap turns [[a, b], [c]] into [a, b, c].
   found = data.results.flatMap((r) => (r.ok ? r.items : []));
   renderResults(data.results);
   const failed = data.results.filter((r) => !r.ok).length;
-  $('status').textContent = `Found ${found.length} file(s)` + (failed ? `, ${failed} link(s) failed.` : '.');
-  $('zip').hidden = $('share').hidden = found.length === 0;
+  say($('status'), `Found ${found.length} file(s)` + (failed ? `. ${failed} link(s) didn't work.` : ''));
+  $('saveActions').hidden = found.length === 0;
 });
 
 // Draw one row per item, plus one row per failed link.
 function renderResults(results) {
-  const list = $('results');
   const addRow = (title, detail, item) => {
     const li = document.createElement('li');
     if (!item) li.className = 'fail';
@@ -226,7 +228,7 @@ function renderResults(results) {
       a.textContent = 'Save';
       li.appendChild(a);
     }
-    list.appendChild(li);
+    $('results').appendChild(li);
   };
   for (const r of results) {
     if (!r.ok) addRow(r.link, r.error, null);
@@ -238,23 +240,26 @@ onClick($('zip'), $('status'), async () => saveZip(await fetchFiles(found, $('st
 onClick($('share'), $('status'), async () => shareFiles(await fetchFiles(found, $('status')), $('status')));
 
 // ---------------------------------------------------------------------------
-// 2. Resize & crop (all done on your phone; nothing is uploaded)
+// Resize & crop (all done on your phone; nothing is uploaded)
 // ---------------------------------------------------------------------------
+// Show how many images were picked in the drop zone.
+$('upload').addEventListener('change', () => {
+  const n = $('upload').files.length;
+  $('dropText').textContent = n ? `${n} image(s) added` : 'Add your own images';
+});
+
 // Draw one image onto a canvas of the chosen size and return a JPEG File.
 async function resizeOne(file, width, height, mode) {
-  // createImageBitmap decodes the image so we can draw it.
-  const img = await createImageBitmap(file);
+  const img = await createImageBitmap(file); // decode the image
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
 
-  // "cover" scale fills the whole canvas (some edges get cut off).
-  // "contain" scale fits the whole image inside (leaves empty bands).
+  // "cover" fills the whole canvas (edges get cut off);
+  // "contain" fits the whole image inside (leaves empty bands).
   const cover = Math.max(width / img.width, height / img.height);
   const contain = Math.min(width / img.width, height / img.height);
-
-  // Draw the image at a given scale, centred on the canvas.
   const drawCentered = (scale) => {
     const w = img.width * scale;
     const h = img.height * scale;
@@ -271,8 +276,7 @@ async function resizeOne(file, width, height, mode) {
     drawCentered(contain);
   }
 
-  // Turn the canvas into JPEG data. toBlob uses a "callback" (a function
-  // it calls when done), so we wrap it in a Promise to be able to await it.
+  // toBlob uses a callback, so wrap it in a Promise to be able to await it.
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
   const base = file.name.replace(/\.[^.]+$/, '');
   return new File([blob], `${base}-${width}x${height}.jpg`, { type: 'image/jpeg' });
@@ -280,27 +284,26 @@ async function resizeOne(file, width, height, mode) {
 
 onClick($('resize'), $('resizeStatus'), async () => {
   const status = $('resizeStatus');
-  // Images from the found list (fetched through the relay) + uploads.
   const foundImages = found.filter((item) => item.type === 'image');
   const fromLinks = foundImages.length ? await fetchFiles(foundImages, status) : [];
-  const uploads = [...$('upload').files];
-  const sources = [...fromLinks, ...uploads];
-  if (sources.length === 0) throw new Error('No images yet. Find some above, or add your own.');
+  const sources = [...fromLinks, ...$('upload').files];
+  if (sources.length === 0) throw new Error('No images yet. Find some in save, or add your own above.');
 
-  // "1280x720" -> [1280, 720]
-  const [width, height] = $('size').value.split('x').map(Number);
+  const [width, height] = picked('size').split('x').map(Number); // "1280x720" -> [1280, 720]
   resized = [];
   $('preview').innerHTML = '';
+  $('resizeActions').hidden = true;
   for (let i = 0; i < sources.length; i++) {
-    status.textContent = `Resizing ${i + 1} of ${sources.length}...`;
-    const out = await resizeOne(sources[i], width, height, $('mode').value);
+    say(status, `Resizing ${i + 1} of ${sources.length}`);
+    const out = await resizeOne(sources[i], width, height, picked('fit'));
     resized.push(out);
     const thumb = document.createElement('img');
     thumb.src = URL.createObjectURL(out);
+    thumb.alt = out.name;
     $('preview').appendChild(thumb);
   }
-  status.textContent = `Resized ${resized.length} image(s) to ${width}×${height}.`;
-  $('resizeZip').hidden = $('resizeShare').hidden = false;
+  say(status, `Resized ${resized.length} image(s) to ${width} × ${height}`);
+  $('resizeActions').hidden = false;
 });
 
 onClick($('resizeZip'), $('resizeStatus'), () => saveZip(resized, $('resizeStatus'), 'resized'));

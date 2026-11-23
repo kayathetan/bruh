@@ -41,22 +41,19 @@ const LOCK_SCREEN = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>🔒</title>
-<style>
-  body { margin:0; min-height:100vh; display:grid; place-items:center; background:#111; color:#f2f2f2; font:16px/1.4 -apple-system, system-ui, sans-serif; }
-  form { width:min(320px, calc(100vw - 32px)); text-align:center; }
-  .lock { font-size:40px; margin-bottom:16px; }
-  input { width:100%; box-sizing:border-box; background:#1c1c1c; color:#f2f2f2; border:1px solid #333; border-radius:12px; padding:14px; font:inherit; text-align:center; }
-  button { width:100%; margin-top:10px; padding:14px; border:0; border-radius:12px; font:600 16px/1 inherit; color:#fff; background:#7c5cff; }
-  p { color:#ff6b6b; min-height:1.4em; }
-</style>
+<title>bruh</title>
+<meta name="theme-color" content="#120e14">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@1,6..96,400&family=Geist:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
 </head>
-<body>
+<body class="lock">
 <form id="f">
-  <div class="lock">🔒</div>
-  <input id="code" type="password" autocomplete="current-password" autofocus aria-label="Passcode">
-  <button>Unlock</button>
-  <p id="err"></p>
+  <h1 class="mark">bruh</h1>
+  <input id="code" type="password" autocomplete="current-password" autofocus aria-label="Passcode" placeholder="passcode">
+  <button class="btn primary">Unlock</button>
+  <p class="status bad" id="err" aria-live="polite"></p>
 </form>
 <script>
 document.getElementById('f').addEventListener('submit', async (event) => {
@@ -66,8 +63,13 @@ document.getElementById('f').addEventListener('submit', async (event) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ passcode: document.getElementById('code').value }),
   });
-  if (response.ok) location.reload(); // cookie is set: reload shows the app
-  else document.getElementById('err').textContent = 'Nope.';
+  if (response.ok) return location.reload(); // cookie is set: reload shows the app
+  // Wrong: shake the form once, say so, and clear the box.
+  document.body.classList.remove('shake');
+  void document.body.offsetWidth; // forces the browser to restart the animation
+  document.body.classList.add('shake');
+  document.getElementById('err').textContent = 'Wrong passcode.';
+  document.getElementById('code').value = '';
 });
 </script>
 </body>

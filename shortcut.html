@@ -2,49 +2,45 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>bruh shortcut</title>
-  <meta name="theme-color" content="#111111">
-  <style>
-    :root { --bg:#111; --card:#1c1c1c; --text:#f2f2f2; --muted:#9a9a9a; --accent:#7c5cff; }
-    * { box-sizing: border-box; }
-    body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 -apple-system, system-ui, sans-serif; }
-    main { max-width:640px; margin:0 auto; padding:20px 16px 60px; }
-    h1 { font-size:26px; margin:8px 0 4px; }
-    p, li { color:#ddd; }
-    a { color:var(--accent); }
-    ol { padding-left:22px; }
-    li { margin-bottom:12px; }
-    code { background:var(--card); padding:2px 6px; border-radius:6px; font-size:14px; word-break:break-all; }
-    .box { background:var(--card); border-radius:12px; padding:12px; margin:12px 0; word-break:break-all; font:14px/1.4 ui-monospace, monospace; }
-    button { width:100%; padding:14px; border:0; border-radius:12px; font:600 16px/1 inherit; color:#fff; background:var(--accent); }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <title>bruh · shortcut</title>
+  <meta name="theme-color" content="#120e14">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@1,6..96,400&family=Geist:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<main>
-  <h1>Share-sheet shortcut</h1>
-  <p>Once this is set up: in any app, tap <b>Share</b> on a post, choose <b>bruh</b>, and the media saves straight to Photos. It works for single posts, boards and profiles.</p>
+<main class="shell guide">
+  <header class="top">
+    <h1 class="mark">bruh</h1>
+    <a class="btn ghost small" href="/">Back</a>
+  </header>
 
-  <p>The Shortcut can't use your login, so its address carries your passcode. Type it here to build the address (it stays on this page and isn't sent anywhere):</p>
-  <input id="code" type="password" placeholder="Passcode" style="width:100%; box-sizing:border-box; background:#1c1c1c; color:#f2f2f2; border:1px solid #333; border-radius:12px; padding:12px; font:inherit">
-  <div class="box" id="address">Your address appears here.</div>
-  <button id="copy">Copy address</button>
+  <h2>Save from any app</h2>
+  <p>Once it's set up, tap <b>Share</b> on a post in any app, then <b>bruh</b>, and the photos or videos go straight into Photos. Single posts, boards and profiles all work.</p>
 
-  <h2>Build it (about 2 minutes)</h2>
+  <h2>Your address</h2>
+  <p>The Shortcut can't use your login, so its address carries your passcode. Type it to build the address. It stays on this page and isn't sent anywhere.</p>
+  <input id="code" type="password" placeholder="passcode" aria-label="Passcode">
+  <div class="address" id="address">Your address appears here</div>
+  <button class="btn primary" id="copy">Copy address</button>
+
+  <h2>Build it</h2>
   <ol>
-    <li>Open the <b>Shortcuts</b> app, tap <b>+</b>, and name it <b>bruh</b>.</li>
-    <li>Tap the <b>ⓘ</b> (details) button, turn on <b>Show in Share Sheet</b>, and set it to receive <b>URLs</b> and <b>Text</b>.</li>
-    <li>Add the action <b>URL Encode</b> (it encodes the <b>Shortcut Input</b>, the link you shared).</li>
-    <li>Add the action <b>Text</b>. Paste your address from above, then at the very end insert the variable <b>URL Encoded Text</b>.</li>
-    <li>Add <b>Get Contents of URL</b> (it uses the Text from the step above).</li>
-    <li>Add <b>Split Text</b>, set to split by <b>New Lines</b>.</li>
-    <li>Add <b>Repeat with Each</b> (it repeats over the split text).</li>
+    <li>Open <b>Shortcuts</b>, tap <b>+</b>, and name it <b>bruh</b>.</li>
+    <li>Tap <b>ⓘ</b>, turn on <b>Show in Share Sheet</b>, and set it to receive <b>URLs</b> and <b>Text</b>.</li>
+    <li>Add <b>URL Encode</b>. It encodes the <b>Shortcut Input</b>, the link you shared.</li>
+    <li>Add <b>Text</b>. Paste your address, then insert the variable <b>URL Encoded Text</b> at the very end.</li>
+    <li>Add <b>Get Contents of URL</b>. It uses the Text above.</li>
+    <li>Add <b>Split Text</b>, split by <b>New Lines</b>.</li>
+    <li>Add <b>Repeat with Each</b>.</li>
     <li>Inside the repeat, add <b>Get Contents of URL</b> using <b>Repeat Item</b>.</li>
-    <li>Still inside the repeat, add <b>Save to Photo Album</b> (Recents).</li>
-    <li>Done. Try it: open a post in its app, tap <b>Share</b>, then <b>bruh</b>. The first time, iPhone will ask for permission to reach the site. Tap <b>Always Allow</b>.</li>
+    <li>Inside the repeat, add <b>Save to Photo Album</b>.</li>
+    <li>Try it: Share a post, tap <b>bruh</b>, and choose <b>Always Allow</b> when asked.</li>
   </ol>
-  <p>If it saves nothing, open the shortcut, tap ▶ on a copied link, and look at what the first <b>Get Contents of URL</b> returns. An error message there (like "Wrong passcode") tells you what's wrong.</p>
-  <p><a href="/">← Back</a></p>
+  <p>If nothing saves, run the shortcut on a copied link and check what the first <b>Get Contents of URL</b> returns. It will say what went wrong, for example "Wrong passcode".</p>
 </main>
 <script>
 // Rebuild the address every time you type in the passcode box.
@@ -53,7 +49,7 @@ let address = '';
 const code = document.getElementById('code');
 code.addEventListener('input', () => {
   address = code.value ? `${location.origin}/api/list?p=${encodeURIComponent(code.value)}&link=` : '';
-  document.getElementById('address').textContent = address || 'Your address appears here.';
+  document.getElementById('address').textContent = address || 'Your address appears here';
   document.getElementById('copy').textContent = 'Copy address';
 });
 document.getElementById('copy').addEventListener('click', async () => {
