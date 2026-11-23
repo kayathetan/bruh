@@ -1,13 +1,20 @@
 """
-download_pin.py: save a public Pinterest video (or image) to your computer.
+download.py: save videos and images from links to your computer.
 
-Usage (in Terminal, from this folder):
-    python3 download_pin.py https://pin.it/abc123
-    python3 download_pin.py https://www.pinterest.com/pin/1234567890/
+Usage (in Terminal, from this folder). Give it one or more links:
+    python3 download.py <link> <link> <link> ...
 
-The file lands in the `downloads/` folder next to this script.
+Files land in the `downloads/` folder next to this script.
 
-HOW IT WORKS (the same idea sites like KlickPin use):
+Two ways a link gets downloaded:
+  * Most sites (TikTok, Instagram, YouTube, X, boards/profiles, ...) are
+    handed to yt-dlp, a free, well-maintained download tool that keeps up
+    with those sites' constant changes. Install it once with:
+        brew install yt-dlp
+  * Single image/video pins work even without yt-dlp, using the built-in
+    method below.
+
+HOW THE BUILT-IN METHOD WORKS:
   1. Follow the link. A short "pin.it/..." link redirects to the full Pin page.
   2. Download that Pin page's HTML, the same text your browser receives.
   3. Pinterest hides the real media addresses inside that HTML
@@ -123,42 +130,79 @@ def stitch_m3u8(url, destination):
     )
 
 
-def main():
-    # sys.argv is the list of words typed on the command line.
-    # sys.argv[0] is the script name, sys.argv[1] is the Pin link.
-    if len(sys.argv) != 2:
-        sys.exit("Usage: python3 download_pin.py <pinterest pin link>")
-    link = sys.argv[1]
+def is_pin_link(link):
+    """True for links the built-in method can handle (pin.it or pinterest.*)."""
+    return re.search(r"https?://(pin\.it|([a-z]+\.)?pinterest\.[a-z.]+)/", link) is not None
 
-    print(f"Opening {link} ...")
+
+def download_builtin(link):
+    """The built-in method for a single pin. Returns True if it saved
+    something, False if the link turned out not to be a single pin
+    (e.g. a board), so the caller can try yt-dlp instead."""
     final_url, html = fetch_page(link)
+    if "/pin/" not in final_url:
+        return False  # a board or profile: let yt-dlp deal with it
     pin_id = pin_id_from(final_url)
     mp4s, m3u8s, images = find_media(html)
-
-    DOWNLOAD_DIR.mkdir(exist_ok=True)  # create the folder if it's missing
 
     # Prefer a direct .mp4, then a stitched .m3u8, then fall back to an image.
     if mp4s:
         target = DOWNLOAD_DIR / f"{pin_id}.mp4"
-        print("Found a video, downloading...")
         download_file(mp4s[0], target)
     elif m3u8s:
         target = DOWNLOAD_DIR / f"{pin_id}.mp4"
-        print("Found a streaming video, stitching it together with ffmpeg...")
         stitch_m3u8(m3u8s[0], target)
     elif images:
         # Keep the image's own extension (.jpg, .png, .gif...).
-        extension = Path(images[0]).suffix
-        target = DOWNLOAD_DIR / f"{pin_id}{extension}"
-        print("No video on this Pin, downloading the full-size image...")
+        target = DOWNLOAD_DIR / f"{pin_id}{Path(images[0]).suffix}"
         download_file(images[0], target)
     else:
-        sys.exit(
-            "Couldn't find any media on that page. The Pin may be private or "
-            "deleted, or Pinterest may have changed how its pages are built."
-        )
+        raise RuntimeError("no media found (private, deleted, or the page changed)")
+    print(f"  saved {target.name}")
+    return True
 
-    print(f"Saved: {target}")
+
+def download_with_ytdlp(link):
+    """Hand the link to yt-dlp. It handles a huge list of sites."""
+    if shutil.which("yt-dlp") is None:
+        raise RuntimeError("this link needs yt-dlp. Install it with: brew install yt-dlp")
+    subprocess.run(
+        [
+            "yt-dlp",
+            "--quiet", "--no-warnings", "--progress",
+            # Save into downloads/, named "<site>-<id>.<ext>".
+            "-o", str(DOWNLOAD_DIR / "%(extractor_key)s-%(id)s.%(ext)s"),
+            # Merge separate video+audio streams into one mp4 where needed.
+            "--merge-output-format", "mp4",
+            link,
+        ],
+        check=True,
+    )
+
+
+def main():
+    # sys.argv is the list of words typed on the command line.
+    # sys.argv[0] is the script name; everything after it is a link.
+    links = sys.argv[1:]
+    if not links:
+        sys.exit("Usage: python3 download.py <link> [<link> ...]")
+
+    DOWNLOAD_DIR.mkdir(exist_ok=True)  # create the folder if it's missing
+    failures = 0
+
+    # enumerate() gives a counter alongside each item: (1, link), (2, link)...
+    for number, link in enumerate(links, start=1):
+        print(f"[{number}/{len(links)}] {link}")
+        try:
+            # Single pins: built-in first (no extra install needed).
+            if is_pin_link(link) and download_builtin(link):
+                continue  # done with this link, go to the next one
+            download_with_ytdlp(link)
+        except Exception as error:  # one bad link shouldn't stop the rest
+            failures += 1
+            print(f"  failed: {error}")
+
+    print(f"Done. {len(links) - failures} of {len(links)} link(s) saved to {DOWNLOAD_DIR}")
 
 
 # This line means "only run main() when the script is run directly",
