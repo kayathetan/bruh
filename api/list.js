@@ -5,12 +5,12 @@
 // gets this list back, then downloads each line and saves it to Photos.
 // Plain text (not JSON) keeps the Shortcut simple: "split by new lines".
 
-import { passcodeOk } from './_lib/http.js';
+import { isAuthed } from './_lib/http.js';
 import { resolveLink } from './_lib/resolve.js';
 
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  if (!passcodeOk(req.query.p)) return res.status(401).send('Wrong passcode');
+  if (!isAuthed(req, req.query.p)) return res.status(401).send('Wrong passcode');
 
   // The shared link should arrive URL-encoded. If it wasn't, any "&" inside
   // it would be cut off, so take everything after "link=" in the raw address.

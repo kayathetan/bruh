@@ -25,8 +25,9 @@
   <h1>Share-sheet shortcut</h1>
   <p>Once this is set up: in any app, tap <b>Share</b> on a post, choose <b>bruh</b>, and the media saves straight to Photos. It works for single posts, boards and profiles.</p>
 
-  <p>Your personal address (it includes your passcode, so don't share it):</p>
-  <div class="box" id="address">Open the main page and enter your passcode first.</div>
+  <p>The Shortcut can't use your login, so its address carries your passcode. Type it here to build the address (it stays on this page and isn't sent anywhere):</p>
+  <input id="code" type="password" placeholder="Passcode" style="width:100%; box-sizing:border-box; background:#1c1c1c; color:#f2f2f2; border:1px solid #333; border-radius:12px; padding:12px; font:inherit">
+  <div class="box" id="address">Your address appears here.</div>
   <button id="copy">Copy address</button>
 
   <h2>Build it (about 2 minutes)</h2>
@@ -46,18 +47,20 @@
   <p><a href="/">← Back</a></p>
 </main>
 <script>
-// Build this person's shortcut address from the saved passcode.
-let passcode = '';
-try { passcode = localStorage.getItem('passcode') || ''; } catch {}
-if (passcode) {
-  // The shared link gets added to the end, after "link=".
-  const address = `${location.origin}/api/list?p=${encodeURIComponent(passcode)}&link=`;
-  document.getElementById('address').textContent = address;
-  document.getElementById('copy').addEventListener('click', async () => {
-    await navigator.clipboard.writeText(address);
-    document.getElementById('copy').textContent = 'Copied';
-  });
-}
+// Rebuild the address every time you type in the passcode box.
+// The shared link gets added to the end, after "link=".
+let address = '';
+const code = document.getElementById('code');
+code.addEventListener('input', () => {
+  address = code.value ? `${location.origin}/api/list?p=${encodeURIComponent(code.value)}&link=` : '';
+  document.getElementById('address').textContent = address || 'Your address appears here.';
+  document.getElementById('copy').textContent = 'Copy address';
+});
+document.getElementById('copy').addEventListener('click', async () => {
+  if (!address) return;
+  await navigator.clipboard.writeText(address);
+  document.getElementById('copy').textContent = 'Copied';
+});
 </script>
 </body>
 </html>

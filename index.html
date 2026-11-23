@@ -38,11 +38,11 @@
 </head>
 <body>
 <main>
-  <h1>bruh</h1>
+  <div class="row" style="align-items:center">
+    <h1>bruh</h1>
+    <a href="#" id="lock" style="flex:0; white-space:nowrap; color:var(--muted); text-decoration:none">🔒 Lock</a>
+  </div>
   <p class="sub">Paste links, save everything. <a href="/shortcut.html">Set up the share-sheet shortcut</a></p>
-
-  <label for="passcode">Passcode</label>
-  <input id="passcode" type="password" autocomplete="current-password">
 
   <!-- ===================== 1. Download ===================== -->
   <label for="links">Links (one per line, or paste any text containing links)</label>
@@ -97,10 +97,17 @@
 // document.getElementById finds an element on the page by its id="...".
 const $ = (id) => document.getElementById(id);
 
-// Remember the passcode on this phone. try/catch because private browsing
-// can block storage, and the page should still work without it.
-try { $('passcode').value = localStorage.getItem('passcode') || ''; } catch {}
-const passcode = () => $('passcode').value;
+// You're logged in by a cookie (set on the lock screen), which the browser
+// sends automatically with every request to this site. "Lock" clears it.
+$('lock').addEventListener('click', async (event) => {
+  event.preventDefault();
+  await fetch('/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ logout: true }),
+  });
+  location.reload(); // no cookie any more, so the lock screen shows
+});
 
 // Items found by "Find media": { type, mediaUrl, filename }.
 let found = [];
@@ -114,7 +121,7 @@ function extractLinks(text) {
 
 // Address of our relay for one file (see api/file.js for why we relay).
 function fileUrl(item) {
-  const params = new URLSearchParams({ url: item.mediaUrl, name: item.filename, p: passcode() });
+  const params = new URLSearchParams({ url: item.mediaUrl, name: item.filename });
   return `/api/file?${params}`;
 }
 
@@ -177,7 +184,6 @@ function onClick(button, statusEl, action) {
 onClick($('find'), $('status'), async () => {
   const links = extractLinks($('links').value);
   if (links.length === 0) throw new Error('No links found in that text.');
-  try { localStorage.setItem('passcode', passcode()); } catch {}
 
   $('zip').hidden = $('share').hidden = true;
   $('results').innerHTML = '';
@@ -186,7 +192,7 @@ onClick($('find'), $('status'), async () => {
   // Ask our server to find the media. "await" waits for the answer.
   const response = await fetch('/api/resolve', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-passcode': passcode() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ links }),
   });
   const data = await response.json();

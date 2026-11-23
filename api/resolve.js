@@ -5,14 +5,14 @@
 // Finds the media behind each link. One link can give several items
 // (a board, a profile, or a post with several photos).
 
-import { passcodeOk, mapLimited } from './_lib/http.js';
+import { isAuthed, mapLimited } from './_lib/http.js';
 import { resolveLink } from './_lib/resolve.js';
 
 const MAX_LINKS = 50;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST' });
-  if (!passcodeOk(req.headers['x-passcode'])) return res.status(401).json({ error: 'Wrong passcode' });
+  if (!isAuthed(req, req.headers['x-passcode'])) return res.status(401).json({ error: 'Wrong passcode' });
 
   // Clean up the list: trim spaces, drop blanks and duplicates, cap the count.
   const links = [...new Set((req.body?.links || []).map((l) => String(l).trim()).filter(Boolean))]

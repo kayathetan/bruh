@@ -8,11 +8,11 @@
 // server fetches the file and relays it.
 
 import { Readable } from 'node:stream';
-import { BROWSER_HEADERS, passcodeOk } from './_lib/http.js';
+import { BROWSER_HEADERS, isAuthed } from './_lib/http.js';
 import { ALLOWED_MEDIA_HOSTS } from './_lib/resolve.js';
 
 export default async function handler(req, res) {
-  if (!passcodeOk(req.query.p)) return res.status(401).send('Wrong passcode');
+  if (!isAuthed(req, req.query.p)) return res.status(401).send('Wrong passcode');
 
   // Only relay files from the known media servers, nothing else, so nobody
   // can use this site to fetch arbitrary web pages.

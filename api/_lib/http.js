@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 // Small shared helpers for talking to other websites.
 // (Folders/files starting with "_" inside api/ are not turned into URLs by
 // Vercel. They're just modules the real endpoints import.)
@@ -17,11 +19,34 @@ export async function getJson(url) {
   return response.json();
 }
 
-// Optional passcode so only you can use the deployed site.
-// If APP_PASSCODE isn't set in Vercel, the site is open to anyone.
-export function passcodeOk(provided) {
+// ---------------------------------------------------------------------------
+// Passcode / login
+// ---------------------------------------------------------------------------
+// Logging in sets a cookie (a small value the browser sends back with every
+// request). The cookie holds a *hash* of the passcode, not the passcode
+// itself: a scrambled fingerprint that can't be turned back into the original.
+// middleware.js computes the same hash to decide whether to show the app.
+export const COOKIE_NAME = 'bruh';
+
+export function authToken() {
+  return createHash('sha256').update(`bruh-v1:${process.env.APP_PASSCODE}`).digest('hex');
+}
+
+// Read one cookie's value out of the "Cookie" request header,
+// which looks like "a=1; bruh=abc123; c=3".
+function readCookie(req, name) {
+  const pair = (req.headers.cookie || '').split(';').map((c) => c.trim())
+    .find((c) => c.startsWith(`${name}=`));
+  return pair ? pair.slice(name.length + 1) : null;
+}
+
+// Allowed if: no passcode is configured, OR the right passcode was sent
+// directly (the iPhone Shortcut does this), OR the login cookie is valid.
+export function isAuthed(req, providedPasscode) {
   const expected = process.env.APP_PASSCODE;
-  return !expected || provided === expected;
+  if (!expected) return true;
+  if (providedPasscode === expected) return true;
+  return readCookie(req, COOKIE_NAME) === authToken();
 }
 
 // Run `worker` on every item, but only `limit` at a time, so we don't
