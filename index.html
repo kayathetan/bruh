@@ -23,10 +23,12 @@
   <nav class="tabs" role="tablist">
     <button role="tab" id="tab-save" aria-controls="panel-save" aria-selected="true">save</button>
     <button role="tab" id="tab-resize" aria-controls="panel-resize" aria-selected="false">resize</button>
+    <button role="tab" id="tab-montage" aria-controls="panel-montage" aria-selected="false">montage</button>
   </nav>
 
   <!-- ===================== Save ===================== -->
   <section id="panel-save" role="tabpanel" aria-labelledby="tab-save">
+    <p class="hint">Single posts, whole boards and whole profiles all work. A board or profile link brings back everything on it, up to 50 items.</p>
     <textarea id="links" aria-label="Links" placeholder="Paste links here. One, fifty, or a messy block of text."></textarea>
     <button class="btn primary" id="find">Find media</button>
     <p class="status" id="status" aria-live="polite"></p>
@@ -72,6 +74,61 @@
     <div class="actions" id="resizeActions" hidden>
       <button class="btn primary" id="resizeShare">Save to Photos</button>
       <button class="btn ghost" id="resizeZip">Download zip</button>
+    </div>
+  </section>
+
+  <!-- ===================== Montage ===================== -->
+  <section id="panel-montage" role="tabpanel" aria-labelledby="tab-montage" hidden>
+    <p class="hint">Photos flash by, videos play in full, with a flash at every cut. It records in real time on your phone, so keep this page open until it's done.</p>
+
+    <label class="drop">
+      <input id="montageUpload" type="file" accept="image/*,video/*" multiple>
+      <span id="montageText">Choose photos and videos</span>
+    </label>
+
+    <fieldset class="group">
+      <legend>Add</legend>
+      <div class="pills">
+        <input type="checkbox" id="useFound"><label for="useFound">Media found in save</label>
+        <input type="checkbox" id="shuffle"><label for="shuffle">Shuffle order</label>
+        <input type="checkbox" id="keepSound"><label for="keepSound">Keep video sound</label>
+      </div>
+    </fieldset>
+
+    <fieldset class="group">
+      <legend>Each photo</legend>
+      <div class="pills">
+        <input type="radio" name="photoTime" id="pt1" value="250"><label for="pt1">0.25s</label>
+        <input type="radio" name="photoTime" id="pt2" value="500" checked><label for="pt2">0.5s</label>
+        <input type="radio" name="photoTime" id="pt3" value="1000"><label for="pt3">1s</label>
+      </div>
+    </fieldset>
+
+    <fieldset class="group">
+      <legend>Flash</legend>
+      <div class="pills">
+        <input type="radio" name="flash" id="fl1" value="white" checked><label for="fl1">White</label>
+        <input type="radio" name="flash" id="fl2" value="black"><label for="fl2">Black</label>
+        <input type="radio" name="flash" id="fl3" value="none"><label for="fl3">None</label>
+      </div>
+    </fieldset>
+
+    <fieldset class="group">
+      <legend>Shape</legend>
+      <div class="pills">
+        <input type="radio" name="montageSize" id="ms1" value="1920x1080" checked><label for="ms1">16:9 <small>1920 × 1080</small></label>
+        <input type="radio" name="montageSize" id="ms2" value="1080x1920"><label for="ms2">9:16 <small>1080 × 1920</small></label>
+        <input type="radio" name="montageSize" id="ms3" value="1080x1080"><label for="ms3">1:1 <small>1080 × 1080</small></label>
+      </div>
+    </fieldset>
+
+    <button class="btn primary" id="makeMontage">Make montage</button>
+    <p class="status" id="montageStatus" aria-live="polite"></p>
+    <div class="stage" id="stage" hidden><canvas id="montageCanvas"></canvas></div>
+    <video class="stage-video" id="montageResult" controls playsinline hidden></video>
+    <div class="actions" id="montageActions" hidden>
+      <button class="btn primary" id="montageShare">Save to Photos</button>
+      <button class="btn ghost" id="montageDownload">Download</button>
     </div>
   </section>
 </main>
@@ -308,6 +365,180 @@ onClick($('resize'), $('resizeStatus'), async () => {
 
 onClick($('resizeZip'), $('resizeStatus'), () => saveZip(resized, $('resizeStatus'), 'resized'));
 onClick($('resizeShare'), $('resizeStatus'), () => shareFiles(resized, $('resizeStatus')));
+
+// ---------------------------------------------------------------------------
+// Montage: photos (0.5s each) + videos (full length), flash at each cut
+// ---------------------------------------------------------------------------
+// HOW IT WORKS: we play every photo and video onto a <canvas> (a drawable
+// rectangle), frame by frame, while MediaRecorder records that canvas
+// like a screen recording. That's why it takes as long as the video itself.
+
+const FLASH_MS = 140;       // how long each flash takes to fade out
+let montageFile = null;     // the finished video, ready to save
+
+$('montageUpload').addEventListener('change', () => {
+  const files = [...$('montageUpload').files];
+  const videos = files.filter((f) => f.type.startsWith('video/')).length;
+  $('montageText').textContent = files.length
+    ? `${files.length - videos} photo(s), ${videos} video(s) chosen`
+    : 'Choose photos and videos';
+});
+
+// Pick a video format this browser can record. iPhones record mp4;
+// some desktop browsers only do webm (YouTube accepts both).
+function pickRecordingFormat() {
+  const options = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
+  return options.find((type) => window.MediaRecorder && MediaRecorder.isTypeSupported(type));
+}
+
+// Shuffle an array in place (the "Fisher–Yates" method: swap each item
+// with a random earlier one).
+function shuffleInPlace(list) {
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  return list;
+}
+
+// Get one clip ready to draw: decode a photo, or load a video.
+async function loadClip(file, keepSound) {
+  if (file.type.startsWith('video/')) {
+    const video = document.createElement('video');
+    video.src = URL.createObjectURL(file);
+    video.playsInline = true;   // play inside the page, not fullscreen (iPhone)
+    video.muted = !keepSound;
+    video.preload = 'auto';
+    // Wait until the first frame is ready ("loadeddata").
+    await new Promise((resolve, reject) => {
+      video.onloadeddata = resolve;
+      video.onerror = () => reject(new Error(`Couldn't read ${file.name}`));
+    });
+    return { kind: 'video', source: video, width: video.videoWidth, height: video.videoHeight };
+  }
+  const bitmap = await createImageBitmap(file);
+  return { kind: 'image', source: bitmap, width: bitmap.width, height: bitmap.height };
+}
+
+onClick($('makeMontage'), $('montageStatus'), async () => {
+  const status = $('montageStatus');
+  if (!$('montageCanvas').captureStream || !pickRecordingFormat()) {
+    throw new Error("This browser can't record video. Try Safari on iPhone or Chrome on a computer.");
+  }
+
+  // 1. Gather the files: found media (optional) + the ones you chose.
+  let files = [...$('montageUpload').files];
+  if ($('useFound').checked && found.length) files = [...(await fetchFiles(found, status)), ...files];
+  if (files.length === 0) throw new Error('Choose some photos or videos first.');
+  if ($('shuffle').checked) shuffleInPlace(files);
+
+  const photoMs = Number(picked('photoTime'));
+  const flash = picked('flash');
+  const keepSound = $('keepSound').checked;
+  const [W, H] = picked('montageSize').split('x').map(Number);
+
+  // 2. Set up the canvas we draw onto.
+  const canvas = $('montageCanvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  $('stage').hidden = false;
+  $('montageResult').hidden = true;
+  $('montageActions').hidden = true;
+
+  // Draw a clip so it fills the whole frame (cropping the edges if needed).
+  const drawFill = (clip) => {
+    const scale = Math.max(W / clip.width, H / clip.height);
+    const w = clip.width * scale;
+    const h = clip.height * scale;
+    ctx.drawImage(clip.source, (W - w) / 2, (H - h) / 2, w, h);
+  };
+  // The flash: a white (or black) layer that fades out after a cut.
+  const drawFlash = (msSinceCut) => {
+    if (flash === 'none') return;
+    const opacity = 1 - msSinceCut / FLASH_MS;
+    if (opacity <= 0) return;
+    ctx.fillStyle = flash === 'white' ? `rgba(255,255,255,${opacity})` : `rgba(0,0,0,${opacity})`;
+    ctx.fillRect(0, 0, W, H);
+  };
+
+  // 3. Sound (optional): route each video's audio into the recording.
+  let audioContext = null;
+  let audioOut = null;
+  if (keepSound) {
+    audioContext = new AudioContext();
+    audioOut = audioContext.createMediaStreamDestination();
+  }
+
+  // 4. Start recording the canvas, 30 frames per second.
+  const stream = canvas.captureStream(30);
+  if (audioOut) audioOut.stream.getAudioTracks().forEach((track) => stream.addTrack(track));
+  const format = pickRecordingFormat();
+  const recorder = new MediaRecorder(stream, { mimeType: format, videoBitsPerSecond: 12_000_000 });
+  const chunks = [];
+  recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+  const finished = new Promise((resolve) => { recorder.onstop = resolve; });
+  recorder.start(250); // hand over recorded data every 250ms
+
+  // Show one clip, redrawing every screen refresh until it's done.
+  // requestAnimationFrame(fn) = "call fn just before the next screen refresh".
+  const showClip = (clip, isFirst) => new Promise((resolve, reject) => {
+    const start = performance.now();
+    const frame = (now) => {
+      const elapsed = now - start;
+      drawFill(clip);
+      if (!isFirst) drawFlash(elapsed);
+      const done = clip.kind === 'image' ? elapsed >= photoMs : clip.source.ended;
+      if (done) return resolve();
+      requestAnimationFrame(frame);
+    };
+    if (clip.kind === 'video') {
+      if (audioContext) audioContext.createMediaElementSource(clip.source).connect(audioOut);
+      // play() returns a Promise; if the browser refuses, report it.
+      clip.source.play().then(() => requestAnimationFrame(frame), reject);
+    } else {
+      requestAnimationFrame(frame);
+    }
+  });
+
+  // 5. Play everything in order. While one clip shows, the next one loads,
+  //    so there's no pause between them.
+  let next = loadClip(files[0], keepSound);
+  for (let i = 0; i < files.length; i++) {
+    status.textContent = `Recording ${i + 1} of ${files.length}. Keep this page open.`;
+    const clip = await next;
+    next = i + 1 < files.length ? loadClip(files[i + 1], keepSound) : null;
+    await showClip(clip, i === 0);
+    if (clip.kind === 'video') URL.revokeObjectURL(clip.source.src); // free memory
+    else clip.source.close();
+  }
+
+  // 6. Stop recording and package the result.
+  recorder.stop();
+  await finished;
+  if (audioContext) audioContext.close();
+  const type = format.split(';')[0];
+  const extension = type === 'video/mp4' ? 'mp4' : 'webm';
+  const blob = new Blob(chunks, { type });
+  montageFile = new File([blob], `montage-${Date.now()}.${extension}`, { type });
+
+  $('stage').hidden = true;
+  $('montageResult').src = URL.createObjectURL(blob);
+  $('montageResult').hidden = false;
+  $('montageActions').hidden = false;
+  status.textContent = `Done. ${files.length} clip(s), ${(blob.size / 1e6).toFixed(1)} MB.`;
+});
+
+onClick($('montageShare'), $('montageStatus'), () => shareFiles([montageFile], $('montageStatus')));
+onClick($('montageDownload'), $('montageStatus'), async () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(montageFile);
+  a.download = montageFile.name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+});
 </script>
 </body>
 </html>
