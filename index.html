@@ -79,11 +79,11 @@
 
   <!-- ===================== Montage ===================== -->
   <section id="panel-montage" role="tabpanel" aria-labelledby="tab-montage" hidden>
-    <p class="hint">Photos flash by, videos play in full, with a flash at every cut. It records in real time on your phone, so keep this page open until it's done.</p>
+    <p class="hint">Photos flash by, videos and GIFs play in full at normal speed, with a flash at every cut. It records in real time on your phone, so keep this page open until it's done.</p>
 
     <label class="drop">
       <input id="montageUpload" type="file" accept="image/*,video/*" multiple>
-      <span id="montageText">Choose photos and videos</span>
+      <span id="montageText">Choose photos, GIFs and videos</span>
     </label>
 
     <fieldset class="group">
@@ -133,6 +133,7 @@
   </section>
 </main>
 
+<script src="gif.js"></script>
 <script>
 // ---------------------------------------------------------------------------
 // Helpers
@@ -367,7 +368,7 @@ onClick($('resizeZip'), $('resizeStatus'), () => saveZip(resized, $('resizeStatu
 onClick($('resizeShare'), $('resizeStatus'), () => shareFiles(resized, $('resizeStatus')));
 
 // ---------------------------------------------------------------------------
-// Montage: photos (0.5s each) + videos (full length), flash at each cut
+// Montage: photos (0.5s each) + GIFs and videos (full length, 1x), flash at each cut
 // ---------------------------------------------------------------------------
 // HOW IT WORKS: we play every photo and video onto a <canvas> (a drawable
 // rectangle), frame by frame, while MediaRecorder records that canvas
@@ -379,9 +380,10 @@ let montageFile = null;     // the finished video, ready to save
 $('montageUpload').addEventListener('change', () => {
   const files = [...$('montageUpload').files];
   const videos = files.filter((f) => f.type.startsWith('video/')).length;
+  const gifs = files.filter((f) => f.type === 'image/gif').length;
   $('montageText').textContent = files.length
-    ? `${files.length - videos} photo(s), ${videos} video(s) chosen`
-    : 'Choose photos and videos';
+    ? `${files.length - videos - gifs} photo(s), ${gifs} GIF(s), ${videos} video(s) chosen`
+    : 'Choose photos, GIFs and videos';
 });
 
 // Pick a video format this browser can record. iPhones record mp4;
@@ -420,7 +422,28 @@ async function loadClip(file, keepSound) {
     });
     return { kind: 'video', source: video, width: video.videoWidth, height: video.videoHeight };
   }
-  const bitmap = await createImageBitmap(file);
+  // A GIF plays as a GIF: every frame, each for its own delay, once through
+  // at normal (1x) speed. (The usual way of reading a picture would keep only
+  // the first frame.) Checked by the file's first bytes too, because saved
+  // files don't always say they're GIFs.
+  const buffer = await file.arrayBuffer();
+  if (window.BruhGif && window.BruhGif.isGif(new Uint8Array(buffer, 0, Math.min(8, buffer.byteLength)))) {
+    try {
+      const gif = await window.BruhGif.decodeGif(buffer);
+      if (gif.frames.length > 1) {
+        // start times of each frame, so the right one can be found quickly
+        let t = 0;
+        const starts = gif.frames.map((f) => { const s = t; t += f.delay; return s; });
+        return { kind: 'gif', frames: gif.frames, starts, duration: gif.duration,
+          source: gif.frames[0].bitmap, width: gif.width, height: gif.height };
+      }
+      // a one-frame GIF is just a picture
+      return { kind: 'image', source: gif.frames[0].bitmap, width: gif.width, height: gif.height };
+    } catch (_) {
+      // fall through: show it as a still picture rather than skip it
+    }
+  }
+  const bitmap = await createImageBitmap(new Blob([buffer], { type: file.type }));
   return { kind: 'image', source: bitmap, width: bitmap.width, height: bitmap.height };
 }
 
@@ -496,11 +519,19 @@ onClick($('makeMontage'), $('montageStatus'), async () => {
     let lastMoved = start;
     const frame = (now) => {
       const elapsed = now - start;
+      if (clip.kind === 'gif') {
+        // the frame that belongs at this moment, at normal (1x) speed
+        let i = clip.starts.length - 1;
+        while (i > 0 && clip.starts[i] > elapsed) i--;
+        clip.source = clip.frames[i].bitmap;
+      }
       drawFill(clip);
       if (!isFirst) drawFlash(elapsed);
       let done;
       if (clip.kind === 'image') {
         done = elapsed >= photoMs;
+      } else if (clip.kind === 'gif') {
+        done = elapsed >= clip.duration;   // one full play-through
       } else {
         const t = clip.source.currentTime;
         if (t !== lastTime) { lastTime = t; lastMoved = now; }
@@ -534,8 +565,10 @@ onClick($('makeMontage'), $('montageStatus'), async () => {
       v.removeAttribute('src');
       v.load();                  // tells the browser to drop the video decoder
       URL.revokeObjectURL(url);  // frees the file's memory
+    } else if (clip.kind === 'gif') {
+      clip.frames.forEach((f) => f.bitmap.close?.());   // frees every decoded frame
     } else {
-      clip.source.close();       // frees the decoded photo
+      clip.source.close?.();     // frees the decoded photo
     }
   };
 
