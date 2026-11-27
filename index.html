@@ -79,17 +79,18 @@
 
   <!-- ===================== Montage ===================== -->
   <section id="panel-montage" role="tabpanel" aria-labelledby="tab-montage" hidden>
-    <p class="hint">Photos flash by, videos and GIFs play in full at normal speed, with a flash at every cut. It records in real time on your phone, so keep this page open until it's done.</p>
+    <p class="hint">Paste links and add your own pictures: it finds everything, mixes it together and cuts one video. Photos flash by, videos and GIFs play in full at normal speed. It records in real time, so keep this page open until it's done.</p>
+
+    <textarea id="montageLinks" aria-label="Links for the montage" placeholder="Paste pin, board or post links (optional)"></textarea>
 
     <label class="drop">
       <input id="montageUpload" type="file" accept="image/*,video/*" multiple>
-      <span id="montageText">Choose photos, GIFs and videos</span>
+      <span id="montageText">Add your own photos, GIFs and videos (optional)</span>
     </label>
 
     <fieldset class="group">
       <legend>Add</legend>
       <div class="pills">
-        <input type="checkbox" id="useFound"><label for="useFound">Media found in save</label>
         <input type="checkbox" id="shuffle"><label for="shuffle">Shuffle order</label>
         <input type="checkbox" id="keepSound"><label for="keepSound">Keep video sound</label>
       </div>
@@ -238,6 +239,20 @@ function onClick(button, statusEl, action) {
   });
 }
 
+// Ask our server to find the media behind some links (used by save and
+// montage). Returns its answer: { results: [{ ok, link, items | error }] }.
+async function resolveLinks(links) {
+  const response = await fetch('/api/resolve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ links }),
+  });
+  if (response.status === 401) { location.reload(); throw new Error('Locked'); } // logged out: show lock
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'The server had a problem. Try again.');
+  return data;
+}
+
 // ---------------------------------------------------------------------------
 // Save: find media in the pasted links
 // ---------------------------------------------------------------------------
@@ -250,14 +265,7 @@ onClick($('find'), $('status'), async () => {
   say($('status'), `Looking through ${links.length} link(s)`);
 
   // Ask our server to find the media. "await" waits for the answer.
-  const response = await fetch('/api/resolve', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ links }),
-  });
-  if (response.status === 401) { location.reload(); return; } // logged out: show lock
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'The server had a problem. Try again.');
+  const data = await resolveLinks(links);
 
   // One link can produce many items (a board, a multi-photo post...).
   // flatMap turns [[a, b], [c]] into [a, b, c].
@@ -383,7 +391,7 @@ $('montageUpload').addEventListener('change', () => {
   const gifs = files.filter((f) => f.type === 'image/gif').length;
   $('montageText').textContent = files.length
     ? `${files.length - videos - gifs} photo(s), ${gifs} GIF(s), ${videos} video(s) chosen`
-    : 'Choose photos, GIFs and videos';
+    : 'Add your own photos, GIFs and videos (optional)';
 });
 
 // Pick a video format this browser can record. iPhones record mp4;
@@ -391,6 +399,15 @@ $('montageUpload').addEventListener('change', () => {
 function pickRecordingFormat() {
   const options = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
   return options.find((type) => window.MediaRecorder && MediaRecorder.isTypeSupported(type));
+}
+
+// Mix two lists evenly: each item gets a spot between 0 and 1 based on its
+// place in its own list, then everything is sorted by spot. So 6 links and
+// 2 of your pictures come out L L o L L L o L, and 1 link with 4 pictures
+// comes out o o L o o.
+function interleave(a, b) {
+  const spot = (list) => list.map((item, i) => ({ item, at: (i + 0.5) / list.length }));
+  return [...spot(a), ...spot(b)].sort((x, y) => x.at - y.at).map((x) => x.item);
 }
 
 // Shuffle an array in place (the "Fisher–Yates" method: swap each item
@@ -453,10 +470,26 @@ onClick($('makeMontage'), $('montageStatus'), async () => {
     throw new Error("This browser can't record video. Try Safari on iPhone or Chrome on a computer.");
   }
 
-  // 1. Gather the files: found media (optional) + the ones you chose.
-  let files = [...$('montageUpload').files];
-  if ($('useFound').checked && found.length) files = [...(await fetchFiles(found, status)), ...files];
-  if (files.length === 0) throw new Error('Choose some photos or videos first.');
+  // 1. Gather the files: media from the pasted links + your own files.
+  //    Links go link -> media -> download in one go, so nothing has to be
+  //    saved and re-uploaded by hand.
+  const own = [...$('montageUpload').files];
+  const links = extractLinks($('montageLinks').value);
+  let fromLinks = [];
+  let failedLinks = 0;
+  if (links.length) {
+    say(status, `Looking through ${links.length} link(s)`);
+    const data = await resolveLinks(links);
+    failedLinks = data.results.filter((r) => !r.ok).length;
+    const items = data.results.flatMap((r) => (r.ok ? r.items : []));
+    if (!items.length && !own.length) throw new Error("Couldn't find any media in those links.");
+    fromLinks = await fetchFiles(items, status);
+  }
+  if (!fromLinks.length && !own.length) throw new Error('Paste some links or add your own pictures first.');
+
+  // Mix: spread your own files evenly through the linked media (rather than
+  // all at the start or end). Shuffle mixes everything randomly instead.
+  let files = interleave(fromLinks, own);
   if ($('shuffle').checked) shuffleInPlace(files);
 
   const photoMs = Number(picked('photoTime'));
@@ -612,6 +645,7 @@ onClick($('makeMontage'), $('montageStatus'), async () => {
   $('montageResult').hidden = false;
   $('montageActions').hidden = false;
   status.textContent = `Done. ${files.length - skipped.length} clip(s), ${(blob.size / 1e6).toFixed(1)} MB.`
+    + (failedLinks ? ` ${failedLinks} link(s) didn't work.` : '')
     + (skipped.length ? ` Skipped ${skipped.length}: ${skipped.join('; ')}` : '');
 });
 
